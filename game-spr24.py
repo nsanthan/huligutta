@@ -589,6 +589,15 @@ class twostepGoat(valueGoat):
 
         for i in range(self.lookahead-1):
             self.vtoprob(self.values)
+
+        '''
+        At this point, self.values contain the "effective"
+        value function for the lookahead approach.
+
+        Task 1: write code that collects all the state, effective
+        value function pairs as you play.
+        
+        '''
             
         moveprobs = self.softmax(self.values)
         
