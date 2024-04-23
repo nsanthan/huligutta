@@ -419,11 +419,15 @@ class neuralGoat(autoGoat):
 class valueGoat(autoGoat):
     def softmax(self, x):
         x = np.array(x)
-        vector = np.exp(x)/np.sum(np.exp(x))
+        vector = np.exp(x)
+        if np.isinf(vector).any():
+            if np.nanmax(vector) == np.inf:
+                np.where(vector==np.inf, 1, 0)
+            if np.nanmin(vector) == -np.inf:
+                breakpoint()
         if np.isnan(vector).any():
-            print(x)
-            vector = np.ones(x.shape)
-            vector = vector/len(vector)
+            breakpoint()
+        vector = vector/np.sum(vector)
         return vector
 
     def valuefunc(self, matrix):
@@ -502,68 +506,115 @@ class valueGoat(autoGoat):
 
 
 class valueppGoat(valueGoat):
-    def partsoftmax(x):
+    def partialsoftmax(self, x):
         x = np.array(x)
         vector = np.exp(x)
         if np.isinf(vector).any():
-            return np.nanmax(vector)
+            if np.nanmax(vector) == np.inf:
+                return np.inf
+            else:
+                return np.log(np.sum(vector))
         else:
-            return np.log(vector)
-    def betterpredict(self):
-        currentmatrix = copy.deepcopy(self.game.state.board2matrix(self.board))
-        values = []
-        allmoves = self.considermove()
-        lookahead = 1
-        move_i = 0
-
-        tempgame = [None]*lookahead
-        temptigerplayer = [None]*lookahead
-        tempgoatplayer = [None]*lookahead
+            return np.log(np.sum(vector))
         
-        tempgame[0] = Game(self.game.state)
-        temptigerplayer[0] = greedyTiger(tempgame[0])
-        tempgoatplayer[0] = valueGoat(tempgame[0])
-        tempgame[0].addplayers(temptigerplayer[0], tempgoatplayer[0])
-
-        values = np.array([])
+    def assign(self, values, indmove, num):
+        if len(indmove) == 1:
+            values[indmove[0]] = num
+        else:
+            self.assign(values[indmove[0]], indmove[1:], num)
         
-        while move_i <= lookahead:
-            NUM_MOVE = 10
-            move_i = move_1+1
-            allmoves = tempgoatplayer[move_i-1].considermove()
-            currentmatrix = copy.deepcopy(tempgame[move_i-1].state.board2matrix(tempgame[move_i-1].gameBoard))
-            indmove = 0
-            
-            values = values[..., np.newaxis]
-            np.repeat(values, NUM_MOVE, move_i-1)
+    def nextmoves(self, oldtempgame, indmove):
+        if len(indmove) == self.lookahead:
+            currentmatrix = copy.deepcopy(oldtempgame.state.board2matrix(oldtempgame.gameBoard))
+            goatmoves = oldtempgame.players[1].considermove()
+            tempvalues = []
+            for lastmove in goatmoves:
+                tempmatrix =  oldtempgame.players[1].move2matrix(currentmatrix, lastmove)
+                tempvalues.append(oldtempgame.players[1].valuefunc(tempmatrix))
 
-            for nextmove in allmoves:
-                tempgame[move_i] = Game(tempgame[move_i-1].state)
-                temptigerplayer[move_i] = greedyTiger(tempgame[move_i])
-                tempgoatplayer[move_i] = valueGoat(tempgame[move_i])
-                tempgame[move_i].addplayers(temptigerplayer[move_i], tempgoatplayer[move_i])
-                movefunc, piece, dest = nextmove
-                temppiece = tempgame[move_i].state.goats[piece.number]
-                if movefunc == piece.place:
-                    movefunc = temppiece.place
-                if movefunc == piece.move:
-                    movefunc = temppiece.move                
+            self.assign(self.values, indmove, self.partialsoftmax(tempvalues))
+        else:
+            goatmoves = oldtempgame.players[1].considermove()
+            if len(indmove) > 0: 
+                self.assign(self.values, indmove, [0]*len(goatmoves))
+            else:
+                self.values = [0]*len(goatmoves)
+            indmove_i = 0
+            for nextgoatmove in goatmoves:
+                tempgame = Game(oldtempgame.state)
+                temptigerplayer = greedyTiger(tempgame)
+                tempgoatplayer = valueGoat(tempgame)
+                tempgame.addplayers(temptigerplayer, tempgoatplayer)     
 
-                tempgame[move_i].makemove((movefunc, temppiece, dest))
-                nextmatrix = tempgoatplayer[move_i].move2matrix(currentmatrix, firstmove)
-                tigermove = temptigerplayer[move_i].predict()
-                tempgame[move_i].makemove(tigermove)
+                movefunc, oldtemppiece, dest = nextgoatmove
+                piece = tempgame.state.goats[oldtemppiece.number]
+                if movefunc == oldtemppiece.place:
+                    movefunc = piece.place
+                if movefunc == oldtemppiece.move:
+                    movefunc = piece.move                
 
-                nextmatrix = tempgoatplayer[move_i].move2matrix(currentmatrix, firstmove)
-                goatmoves = tempgoatplayer.considermove()                
 
-                tempvalues = []
-                for secondmove in goatmoves:
-                    tempmatrix =  tempgoatplayer.move2matrix(nextmatrix, secondmove)
-                    tempvalues.append(tempgoatplayer.valuefunc(tempmatrix))
-                value[..., indmove] = partialsoftmax(tempvalues)
+                tempgame.makemove((movefunc,piece,dest))
+
+                tigermove = temptigerplayer.predict()
+                tempgame.makemove(tigermove)
+                tempindmove = indmove.copy()
+                tempindmove.append(indmove_i)
+                self.nextmoves(tempgame, tempindmove)
+                indmove_i = indmove_i + 1
+            return goatmoves
+        
+    def vtoprob(self, values):
+        nummoves = len(values)
+        if nummoves == 0:
+            return 1
+        if not isinstance(values[0], list):
+            return self.partialsoftmax(values)
+        else:
+            for i in range(nummoves):
+                values[i] = self.vtoprob(values[i])
+            return values
         
     def predict(self):
+        self.values = []
+        indmove = []
+        self.lookahead = 3
+        
+        tempgame = Game(self.game.state)
+        temptigerplayer = greedyTiger(tempgame)
+        tempgoatplayer = valueGoat(tempgame)
+        tempgame.addplayers(temptigerplayer, tempgoatplayer)             
+
+        allmoves = self.nextmoves(tempgame, indmove)
+
+        for i in range(self.lookahead-1):
+            self.vtoprob(self.values)
+            
+        moveprobs = self.softmax(self.values)
+        
+        if verbose:
+            for moves in range(len(allmoves)):
+                print(allmoves[moves], moveprobs[moves])
+            
+        moveind = npr.choice(np.arange(len(self.values)), p = moveprobs)
+        selectedmove = allmoves[moveind]
+
+        movefunc, temppiece, dest = selectedmove
+        piece = self.game.state.goats[temppiece.number]
+        if movefunc == temppiece.place:
+            movefunc = piece.place
+        if movefunc == temppiece.move:
+            movefunc = piece.move                
+
+
+        if self.game.state.phase == 'place':
+            print('Chosen move: ', piece.position, dest)
+        else:
+            print('Chosen move: ', piece.position.address, dest)
+        return (movefunc, piece, dest)
+
+        
+    def oldpredict(self):
         currentmatrix = copy.deepcopy(self.game.state.board2matrix(self.board))
         allmoves = self.considermove()        
         values = []
@@ -593,7 +644,7 @@ class valueppGoat(valueGoat):
                 tempvalues.append(tempgoatplayer.valuefunc(tempmatrix))
             values.append(tempvalues)
   
-        allvalues = list(itertools.chain.from_iterable(values))
+        allvalues = list(itertools.chain.from_iterable(values)) 
         
         if verbose:
             print(allvalues)
@@ -1508,8 +1559,9 @@ class Tiger(Piece):
         if self.step(address):
             return self
         else:
-            print('Cannot step to ', address)
-            print('Trying a capture...')
+            if verbose:
+                print('Cannot step to ', address)
+                print('Trying a capture...')
             piece = self.capture(address)
             if piece:
                 return piece
