@@ -505,7 +505,7 @@ class valueGoat(autoGoat):
         return movefun
 
 
-class valueppGoat(valueGoat):
+class twostepGoat(valueGoat):
     def partialsoftmax(self, x):
         x = np.array(x)
         vector = np.exp(x)
@@ -1597,6 +1597,6 @@ if __name__ == '__main__':
     boardone = Board(graphics = True)
     gameone.attachboard(boardone)
     tiger = greedyTiger(gameone)
-    goat = valueppGoat(gameone)
+    goat = twostepGoat(gameone)
     gameone.addplayers(tiger, goat)
     gameone.gamelogic()
