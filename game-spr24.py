@@ -422,7 +422,7 @@ class valueGoat(autoGoat):
         vector = np.exp(x)
         if np.isinf(vector).any():
             if np.nanmax(vector) == np.inf:
-                np.where(vector==np.inf, 1, 0)
+                vector = np.where(vector==np.inf, 1, 0)
             if np.nanmin(vector) == -np.inf:
                 breakpoint()
         if np.isnan(vector).any():
@@ -481,6 +481,8 @@ class valueGoat(autoGoat):
             allmoves = []
             for goat in self.pieces:
                 allmoves.extend(goat.allmoves())
+        elif self.game.state.phase == 'over':
+            allmoves = []
         if verbose:
             print('All moves obtained! Possible moves: ', len(allmoves))
         return allmoves
@@ -536,10 +538,39 @@ class twostepGoat(valueGoat):
         else:
             goatmoves = oldtempgame.players[1].considermove()
             if len(indmove) > 0: 
+                if len(goatmoves) > 0:
+                    self.assign(self.values, indmove, [0]*len(goatmoves))
+                else:
+                    self.assign(self.values, indmove, [0])
+            else:
+                self.values = [0]*len(goatmoves)
+
+            if len(goatmoves) == 0:
+                '''
+                Game has ended with a winner.
+                '''
+                tempindmove = indmove.copy()
+                # tempindmove.append(0)        
+                if oldtempgame.winner.identity() == None:
+                    breakpoint()
+                        
+                if oldtempgame.winner.identity() == 'Tiger':
+                    self.assign(self.values, tempindmove, -np.inf)
+                        
+                if oldtempgame.winner.identity() == 'Goat':
+                    self.assign(self.values, tempindmove, np.inf)
+                        
+                return None
+            
+            '''
+            Only come here if len(goatmoves) > 0.
+            '''
+            if len(indmove) > 0: 
                 self.assign(self.values, indmove, [0]*len(goatmoves))
             else:
                 self.values = [0]*len(goatmoves)
             indmove_i = 0
+            
             for nextgoatmove in goatmoves:
                 tempgame = Game(oldtempgame.state)
                 temptigerplayer = greedyTiger(tempgame)
@@ -553,14 +584,18 @@ class twostepGoat(valueGoat):
                 if movefunc == oldtemppiece.move:
                     movefunc = piece.move                
 
-
                 tempgame.makemove((movefunc,piece,dest))
 
-                tigermove = temptigerplayer.predict()
-                tempgame.makemove(tigermove)
-                tempindmove = indmove.copy()
-                tempindmove.append(indmove_i)
-                self.nextmoves(tempgame, tempindmove)
+                if tempgame.state.phase == 'over':
+                    tempindmove = indmove.copy()
+                    tempindmove.append(indmove_i)
+                    self.nextmoves(tempgame, tempindmove)
+                else:
+                    tigermove = temptigerplayer.predict()
+                    tempgame.makemove(tigermove)
+                    tempindmove = indmove.copy()
+                    tempindmove.append(indmove_i)
+                    self.nextmoves(tempgame, tempindmove)
                 indmove_i = indmove_i + 1
             return goatmoves
         
@@ -571,15 +606,36 @@ class twostepGoat(valueGoat):
         if not isinstance(values[0], list):
             return self.partialsoftmax(values)
         else:
+            immediatewins = []
             for i in range(nummoves):
-                values[i] = self.vtoprob(values[i])
-            return values
+                if not isinstance(values[i], list):
+                    if values[i] == np.inf:
+                        immediatewins.append(i)
+            if immediatewins == []:    
+                for i in range(nummoves):
+                    if isinstance(values[i], list):
+                        values[i] = self.vtoprob(values[i])
+            else:
+                for i in immediatewins:
+                    values[i] = np.inf
+                notwins = [ x
+                            for x in range(nummoves)
+                            if x not in immediatewins ]
+                for i in notwins:
+                    values[i] = 0
+        return values
         
     def predict(self):
         self.values = []
         indmove = []
-        self.lookahead = 3
-        
+        if self.game.state.movecount < 5:
+            self.lookahead = 1
+        else:
+            if self.game.state.movecount < 10:
+                self.lookahead = 2
+            else:
+                self.lookahead = 3
+            
         tempgame = Game(self.game.state)
         temptigerplayer = greedyTiger(tempgame)
         tempgoatplayer = valueGoat(tempgame)
@@ -587,7 +643,7 @@ class twostepGoat(valueGoat):
 
         allmoves = self.nextmoves(tempgame, indmove)
 
-        for i in range(self.lookahead-1):
+        while isinstance(self.values[0], list):
             self.vtoprob(self.values)
 
         '''
@@ -598,7 +654,8 @@ class twostepGoat(valueGoat):
         value function pairs as you play.
         
         '''
-            
+
+        
         moveprobs = self.softmax(self.values)
         
         if verbose:
@@ -976,9 +1033,11 @@ class Game():
         if self.state.goatEaten == 6 or self.stalemate():
             if self.state.goatEaten == 6:
                 self.winner = self.players[0]
+                self.state.phase = 'over'
                 return self.winner
             else:
                 self.winner = self.players[1]
+                self.state.phase = 'over'                
                 return self.winner
         else:
             return None
