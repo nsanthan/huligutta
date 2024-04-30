@@ -527,49 +527,52 @@ class twostepGoat(valueGoat):
         
     def nextmoves(self, oldtempgame, indmove):
         if len(indmove) == self.lookahead:
+            if oldtempgame.state.winner != None:
+                ''' Game has ended with a winner. '''
+                if oldtempgame.winner.identity() == 'Tiger':
+                    self.assign(self.values, indmove, -np.inf)
+                        
+                if oldtempgame.winner.identity() == 'Goat':
+                    self.assign(self.values, indmove, np.inf)
+                return None
             currentmatrix = copy.deepcopy(oldtempgame.state.board2matrix(oldtempgame.gameBoard))
             goatmoves = oldtempgame.players[1].considermove()
-            tempvalues = []
+            self.assign(self.values, indmove, [0]*len(goatmoves))
+            indmove_i = 0
             for lastmove in goatmoves:
-                tempmatrix =  oldtempgame.players[1].move2matrix(currentmatrix, lastmove)
-                tempvalues.append(oldtempgame.players[1].valuefunc(tempmatrix))
-
-            self.assign(self.values, indmove, self.partialsoftmax(tempvalues))
+                tempmatrix =  oldtempgame.players[1].move2matrix(currentmatrix,
+                                                                 lastmove)
+                tempindmove = indmove.copy()
+                tempindmove.append(indmove_i)
+                self.assign(self.values,
+                            tempindmove,
+                            oldtempgame.players[1].valuefunc(tempmatrix))
+                indmove_i = indmove_i + 1
+            return goatmoves
         else:
+            if oldtempgame.state.winner != None:
+                ''' Game has ended with a winner. '''
+                if oldtempgame.winner.identity() == 'Tiger':
+                    self.assign(self.values, indmove, -np.inf)
+                        
+                if oldtempgame.winner.identity() == 'Goat':
+                    self.assign(self.values, indmove, np.inf)
+                return None
+
+            ''' Come here only if no winner yet. '''
             goatmoves = oldtempgame.players[1].considermove()
+
             if len(indmove) > 0: 
                 if len(goatmoves) > 0:
                     self.assign(self.values, indmove, [0]*len(goatmoves))
                 else:
-                    self.assign(self.values, indmove, [0])
+                    ''' game not over, but no goat moves? Should never reach!'''
+                    breakpoint()
             else:
                 self.values = [0]*len(goatmoves)
 
-            if len(goatmoves) == 0:
-                '''
-                Game has ended with a winner.
-                '''
-                tempindmove = indmove.copy()
-                # tempindmove.append(0)        
-                if oldtempgame.winner.identity() == None:
-                    breakpoint()
-                        
-                if oldtempgame.winner.identity() == 'Tiger':
-                    self.assign(self.values, tempindmove, -np.inf)
-                        
-                if oldtempgame.winner.identity() == 'Goat':
-                    self.assign(self.values, tempindmove, np.inf)
-                        
-                return None
-            
-            '''
-            Only come here if len(goatmoves) > 0.
-            '''
-            if len(indmove) > 0: 
-                self.assign(self.values, indmove, [0]*len(goatmoves))
-            else:
-                self.values = [0]*len(goatmoves)
             indmove_i = 0
+
             
             for nextgoatmove in goatmoves:
                 tempgame = Game(oldtempgame.state)
@@ -593,37 +596,48 @@ class twostepGoat(valueGoat):
                 else:
                     tigermove = temptigerplayer.predict()
                     tempgame.makemove(tigermove)
-                    tempindmove = indmove.copy()
-                    tempindmove.append(indmove_i)
-                    self.nextmoves(tempgame, tempindmove)
+
+                    ''' Merge the forks here, no distinction at this point.'''
+                    if tempgame.state.phase == 'over':
+                        tempindmove = indmove.copy()
+                        tempindmove.append(indmove_i)
+                        self.nextmoves(tempgame, tempindmove)
+                    else:
+                        tempindmove = indmove.copy()
+                        tempindmove.append(indmove_i)
+                        self.nextmoves(tempgame, tempindmove)
                 indmove_i = indmove_i + 1
             return goatmoves
         
     def vtoprob(self, values):
+        if not isinstance(values, list):
+            return values
+        ''' Values is a list. '''
         nummoves = len(values)
-        if nummoves == 0:
-            return 1
-        if not isinstance(values[0], list):
-            return self.partialsoftmax(values)
-        else:
-            immediatewins = []
-            for i in range(nummoves):
-                if not isinstance(values[i], list):
-                    if values[i] == np.inf:
-                        immediatewins.append(i)
-            if immediatewins == []:    
-                for i in range(nummoves):
-                    if isinstance(values[i], list):
-                        values[i] = self.vtoprob(values[i])
+        myvalues = [0]*nummoves
+        
+        ListOfNumbers = True
+
+        for i in range(nummoves):
+            myvalues[i] = self.vtoprob(values[i])
+
+        return self.partialsoftmax(myvalues)
+
+    def depth(self, values, d):
+        if not isinstance(values, list):
+            if values == np.inf:
+                return d
             else:
-                for i in immediatewins:
-                    values[i] = np.inf
-                notwins = [ x
-                            for x in range(nummoves)
-                            if x not in immediatewins ]
-                for i in notwins:
-                    values[i] = 0
-        return values
+                return np.inf
+
+        nummoves = len(values)
+        depth = [np.inf]*nummoves
+
+        for i in range(nummoves):
+            depth[i] = self.depth(values[i], d+1)
+                    
+        return np.nanmin(depth)
+            
         
     def predict(self):
         self.values = []
@@ -643,8 +657,11 @@ class twostepGoat(valueGoat):
 
         allmoves = self.nextmoves(tempgame, indmove)
 
-        while isinstance(self.values[0], list):
-            self.vtoprob(self.values)
+        valuesarray = [0]*len(self.values)
+        depth = [np.inf]*len(self.values)
+        for i in range(len(self.values)):
+            valuesarray[i] = self.vtoprob(self.values[i])
+            depth[i] = self.depth(self.values[i], 0)
 
         '''
         At this point, self.values contain the "effective"
@@ -654,9 +671,16 @@ class twostepGoat(valueGoat):
         value function pairs as you play.
         
         '''
-
         
-        moveprobs = self.softmax(self.values)
+        if np.nanmin(depth) != np.inf:
+            for i in range(len(depth)):
+                if depth[i] == np.inf:
+                    depth[i] = 0
+                else:
+                    depth[i] = 1/(depth[i]+1)
+            moveprobs = depth/np.sum(depth)
+        else:
+            moveprobs = self.softmax(valuesarray)
         
         if verbose:
             for moves in range(len(allmoves)):
@@ -749,6 +773,7 @@ class Game():
                 self.goatCount = 0
                 self.tigers =[]
                 self.goats = []
+                self.winner = None
             else:
                 self.matrix = copy.deepcopy(State.matrix)
                 self.movecount = copy.deepcopy(State.movecount)
@@ -759,7 +784,7 @@ class Game():
                 self.goatCount = copy.deepcopy(State.goatCount)
                 self.tigers = []
                 self.goats = []
-                
+                self.winner = copy.deepcopy(State.winner)
         def booleanturn(self):
             return self.goatturn
 
@@ -946,7 +971,7 @@ class Game():
                     print('Not waiting on input...')
                 returnedtuple = player.predict()
                 self.makemove(returnedtuple)
-            print('Done with move ', self.state.getmovecount())
+            print(player.identity(), ': done with move ', self.state.getmovecount())
             self.gameBoard.window.update()
             time.sleep(1)
         
