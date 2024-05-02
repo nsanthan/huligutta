@@ -692,7 +692,7 @@ class twostepGoat(valueGoat):
                     if finaldepth[i] == np.inf:
                         finaldepth[i] = 0
                     else:
-                        finaldepth[i] = 2**(-finaldepth[i]-1)
+                        finaldepth[i] = 10**(-finaldepth[i]-1)
                 moveprobs = finaldepth/np.sum(finaldepth)
         else:
             moveprobs = self.softmax(finalvalues)
