@@ -655,14 +655,22 @@ class twostepGoat(valueGoat):
         tempgoatplayer = valueGoat(tempgame)
         tempgame.addplayers(temptigerplayer, tempgoatplayer)             
 
-        allmoves = self.nextmoves(tempgame, indmove)
+        ''' Randomize over tiger moves.'''
+        self.randommoves = 2
+        valuesarray = [0]*self.randommoves
+        depth = [0]*self.randommoves
+        for trial in range(self.randommoves):
+            allmoves = self.nextmoves(tempgame, indmove)
 
-        valuesarray = [0]*len(self.values)
-        depth = [np.inf]*len(self.values)
-        for i in range(len(self.values)):
-            valuesarray[i] = self.vtoprob(self.values[i])
-            depth[i] = self.depth(self.values[i], 0)
+            valuesarray[trial] = [0]*len(self.values)
+            depth[trial] = [np.inf]*len(self.values)
+            for movenumber in range(len(self.values)):
+                valuesarray[trial][movenumber] = self.vtoprob(self.values[movenumber])
+                depth[trial][movenumber] = self.depth(self.values[movenumber], 0)
 
+        finalvalues = np.min(np.array(valuesarray), axis = 0)
+        finaldepth = np.nanmax(np.array(depth), axis = 0)
+        moveprobs = [0]*len(allmoves)
         '''
         At this point, self.values contain the "effective"
         value function for the lookahead approach.
@@ -671,16 +679,23 @@ class twostepGoat(valueGoat):
         value function pairs as you play.
         
         '''
-        
-        if np.nanmin(depth) != np.inf:
-            for i in range(len(depth)):
-                if depth[i] == np.inf:
-                    depth[i] = 0
-                else:
-                    depth[i] = 1/(depth[i]+1)
-            moveprobs = depth/np.sum(depth)
+        if np.nanmin(finaldepth) != np.inf:
+            winnextmove = 0
+            for i in range(len(finaldepth)):
+                if finaldepth[i] == 0:
+                    moveprobs[i] = 1
+                    winnextmove = 1
+            moveprobs = moveprobs/np.sum(moveprobs)
+            
+            if not winnextmove:
+                for i in range(len(finaldepth)):
+                    if finaldepth[i] == np.inf:
+                        finaldepth[i] = 0
+                    else:
+                        finaldepth[i] = 2**(-finaldepth[i]-1)
+                moveprobs = finaldepth/np.sum(finaldepth)
         else:
-            moveprobs = self.softmax(valuesarray)
+            moveprobs = self.softmax(finalvalues)
         
         if verbose:
             for moves in range(len(allmoves)):
