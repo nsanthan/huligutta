@@ -432,6 +432,7 @@ class valueGoat(autoGoat):
 
     def valuefunc(self, matrix):
         board = self.matrix2board(matrix)
+        tigersimmobile = 0
         tigermobility = 0
         numcaptures = 0
         goatsindanger = []
@@ -447,6 +448,8 @@ class valueGoat(autoGoat):
                     tigermobility = tigermobility + len(moves) + len(captures)
                     numcaptures = numcaptures + len(captures)
                     goatsindanger.extend(goats)
+                    if len(moves)+len(captures) == 0:
+                        tigersimmobile = tigersimmobile+1
 
         unsafe = len(goatsindanger)
         
@@ -469,7 +472,7 @@ class valueGoat(autoGoat):
         elif captured >5:
             return -np.inf
         
-        return 1/(tigermobility+1e-2) - 5*(2+captured+unsafe)**2 + 3*(3+positionadv)**1.5
+        return 1/(tigermobility+1e-2) + 2*(tigersimmobile+1)**2 - 5*(2+captured+unsafe)**2 + 3*(3+positionadv)**1.5
 
     
     def considermove(self):
@@ -680,14 +683,17 @@ class twostepGoat(valueGoat):
         
         '''
         if np.nanmin(finaldepth) != np.inf:
+            print('Win likely in ', np.nanmin(finaldepth),' moves!')
             winnextmove = 0
             for i in range(len(finaldepth)):
                 if finaldepth[i] == 0:
                     moveprobs[i] = 1
                     winnextmove = 1
-            moveprobs = moveprobs/np.sum(moveprobs)
-            
-            if not winnextmove:
+                    print('Win next move:', allmoves[i])
+            if winnextmove:
+                moveprobs = moveprobs/np.sum(moveprobs)
+                print(moveprobs)
+            else:
                 for i in range(len(finaldepth)):
                     if finaldepth[i] == np.inf:
                         finaldepth[i] = 0
