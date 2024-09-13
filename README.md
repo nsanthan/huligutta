@@ -2,12 +2,12 @@
 
 ## Motivation
 
-Develop a Reinforcement Learning algorithm on strategy games.
+Develops a Reinforcement Learning algorithm on strategy games.
 
 To run,
 
 ```python
-game.py
+game-fall24.py
 ```
 
 ## How to Play
@@ -41,13 +41,7 @@ Tigers
 
 ## Dependencies
 
-* networkx==2.5
-
-install dependencies by
-
-```conda
-install networkx
-```
+You may have to install tkinter if you do not have it already. This is the graphical base for the code. You can do this via pip or conda, depending on your preference.
 
 ## References
 
