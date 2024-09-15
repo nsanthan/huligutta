@@ -3,7 +3,6 @@ Huligutta (Goats and Tigers)
 file: game.py
 Description: GUI of the game using TKinter
 '''
-
 __author__ = "Cameron Canda and group"
 __status__ = "Dev"
 
