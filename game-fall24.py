@@ -938,9 +938,9 @@ class Game():
                 if verbose:
                     print('Lifting piece:', piece)
                 piece.lift()
-                piece = piece.move(destaddress)
+                returnpiece = piece.move(destaddress)
             if movefunc == piece.place:
-                piece = piece.place(destaddress)
+                returnpiece = piece.place(destaddress)
         else:
             '''
             Invalid/null move function or wrong type piece chosen
@@ -948,10 +948,9 @@ class Game():
             print('Null/invalid move: ', movefunc)
             # No need: player.waitingoninput = True
             player.reset()        
-                
-        return piece
+        return returnpiece
 
-    def handleexceptions(self, piece):
+    def handlemoveexceptions(self, piece):
         '''
         piece returned from makemove.
         If piece is None, something went wrong.
@@ -990,9 +989,13 @@ class Game():
             else:
                 print('Not waiting on input...')
                 returnedtuple = player.predict()
-                self.makemove(returnedtuple)
-                self.state.update(self)
-                player.reset()
+                piece = self.makemove(returnedtuple)
+                if not piece:
+                    print('Invalid move somewhere')
+                    continue
+                else:    
+                    self.state.update(self)
+                    player.reset()
             print(player.identity(), ': done with move ', self.state.getmovecount())
             self.gameBoard.window.update()
             time.sleep(1)
