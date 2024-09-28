@@ -243,7 +243,7 @@ class TigerPlayer(Player):
         super().__init__(game)
         self.playeridentity = "Tiger"
         self.pieces = self.game.state.tigers
-
+        
     def predict(self):
         pass
 
@@ -941,32 +941,34 @@ class Game():
                 piece = piece.move(destaddress)
             if movefunc == piece.place:
                 piece = piece.place(destaddress)
-                        
-            if verbose:
-                print(piece)
-            if not piece:
-                '''Move function did not return anything'''
-                if verbose:
-                    print('Move', movefunc,' unsuccessful, please make a move manually!')
-                player.waitingoninput = True
-            else:
-                if movefunc != piece.lift:
-                    if verbose:
-                        print(' Moved: ',movefunc, piece)
-                    player.reset()
-                    self.state.update(self)
-                else:
-                    self.liftedpiece = piece
-                    if verbose:
-                        print('Lifting piece...', piece)
         else:
             '''
             Invalid/null move function or wrong type piece chosen
             '''
-            print('Null/invalid move: ', movefunc ,' please make a move manually!')
+            print('Null/invalid move: ', movefunc)
+            # No need: player.waitingoninput = True
+            player.reset()        
+                
+        return piece
+
+    def handleexceptions(self, piece):
+        '''
+        piece returned from makemove.
+        If piece is None, something went wrong.
+        '''
+        if verbose:
+            print(piece)
+        if not piece:
+            '''Move function did not return anything'''
+            print('Move', movefunc,' unsuccessful, please make a move manually!')
             player.waitingoninput = True
-                    
-    
+        else:
+            if movefunc != piece.lift:
+                print(' Moved: ',movefunc, piece)
+            else:
+                self.liftedpiece = piece
+                if verbose:
+                    print('Lifting piece...', piece)
 
     def gamelogic(self):
         '''
@@ -976,22 +978,21 @@ class Game():
         '''
         while not self.winner:
             player = self.players[self.state.booleanturn()]
-            if verbose:
-                print('Turn: ', player)
-                print('Phase: ', self.state.getphase())
+            print('Turn: ', player)
+            print('Phase: ', self.state.getphase())
             if player.waitingoninput:
                 print('Waiting on input...')
                 while player.waitingoninput:
                     self.gameBoard.window.update()
-                if verbose:
-                    print('Exiting input loop.')
-                player.reset()
+                print('Exiting input loop.')
                 self.state.update(self)
+                player.reset()
             else:
-                if verbose:
-                    print('Not waiting on input...')
+                print('Not waiting on input...')
                 returnedtuple = player.predict()
                 self.makemove(returnedtuple)
+                self.state.update(self)
+                player.reset()
             print(player.identity(), ': done with move ', self.state.getmovecount())
             self.gameBoard.window.update()
             time.sleep(1)
@@ -1018,6 +1019,7 @@ class Game():
                         return None
                 
             returnedtuple = self.players[self.state.booleanturn()].input(position=position)
+            '''
             movefunc, piece, destaddress = self.checkmove(returnedtuple)
             if not piece:
                 self.players[self.state.booleanturn()].reset()
@@ -1043,12 +1045,12 @@ class Game():
                                 print('Lifting piece')
                             self.liftedpiece = piece
                 else:
-                    '''Function did
-                    not return anything
-                    '''
+                    #Function did not return anything
                     return None
+            '''
+            self.makemove(returnedtuple)
             print('Exiting game:input')
-            
+            return None
 
     def stalemate(self):
         for tiger in self.state.tigers:
@@ -1479,6 +1481,7 @@ class Position(Board):
 
     def buttonpress(self):
         self.board.game.input(position = self)
+        print('Finished button press')
         time.sleep(.25)
         
     def addpiece(self, piece):
@@ -1711,6 +1714,6 @@ if __name__ == '__main__':
     boardone = Board(graphics = True)
     gameone.attachboard(boardone)
     tiger = greedyTiger(gameone)
-    goat = twostepGoat(gameone)
+    goat = GoatPlayer(gameone)
     gameone.addplayers(tiger, goat)
     gameone.gamelogic()
